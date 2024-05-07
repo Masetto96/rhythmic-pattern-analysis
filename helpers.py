@@ -4,7 +4,8 @@ import numpy as np
 def compute_stm(y:np.array, sr, win_size=256, hop=128, n_mels=50, auto_cor_lag_seconds:int = 8):
 
     if sr != 8000:
-        y, sr = librosa.resample(y, target_sr=8000)
+        y = librosa.resample(y, orig_sr=sr, target_sr=8000)
+        sr = 8000
     
     y, _ = librosa.effects.trim(y)
 
