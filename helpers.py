@@ -1,41 +1,22 @@
 import librosa
 import numpy as np
 
-def compute_stm(y, sr, win_size=1024, hop_size=512, n_mels=128):
-    """
-    Compute the scale transform magnitude (STM) for the input audio signal.
+def compute_stm(y:np.array, sr, win_size=256, hop=128, n_mels=50, auto_cor_lag_seconds:int = 8):
 
-    Args:
-        y (numpy.ndarray): The input audio signal.
-        sr (int): The sample rate of the audio signal.
-        win_size (int, optional): The window size for the Short-Time Fourier Transform (STFT). 
-            Defaults to 1024.
-        hop_size (int, optional): The hop size for the STFT. Defaults to 512.
-        n_mels (int, optional): The number of Mel filterbanks. Defaults to 128.
+    if sr != 8000:
+        y, sr = librosa.resample(y, target_sr=8000)
+    
+    y, _ = librosa.effects.trim(y)
 
-    Returns:
-        numpy.ndarray: The STM.
-    """
-    # Fourier
-    spectrogram = librosa.stft(y, win_length=win_size, hop_length=hop_size)
+    mel = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels, win_length=win_size, hop_length=hop)
 
-    # Decompose into harmonic and percussive spectrogram
-    _, percussive_spectro = librosa.decompose.hpss(S=spectrogram)
+    oss = librosa.onset.onset_strength(S=librosa.power_to_db(mel, ref=np.max), sr=sr, lag=2, aggregate=np.median)
 
-    # Percussive mel spectrogram
-    percussive_mel_spec = librosa.feature.melspectrogram(S=percussive_spectro, n_mels=n_mels)
-    percussive_mel_spec = librosa.amplitude_to_db(np.abs(percussive_mel_spec), ref=np.max)
+    oss_ac = librosa.autocorrelate(oss, max_size= auto_cor_lag_seconds * sr // hop)
 
-    # Onset strength
-    oss = librosa.onset.onset_strength(S=percussive_mel_spec, aggregate=np.median, detrend=True, lag=3)
-
-    # 8 seconds max lag for autocorrelation
-    oss_ac = librosa.autocorrelate(oss, max_size= 8 * sr // hop_size)
-
-    # Normalize the autocorrelation
     oss_ac = librosa.util.normalize(oss_ac, norm=np.inf)
 
-    # Scale transform magnitude
-    return librosa.fmt(oss_ac)
+    stm = np.abs(librosa.fmt(oss_ac))
 
+    return stm
 
