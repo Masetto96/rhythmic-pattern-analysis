@@ -6,7 +6,7 @@ from scipy.signal import windows
 
 
 def compute_stm(
-    y: np.ndarray,
+    oss_autocorrelation: np.ndarray,
     sr: int,
     target_sr: int = 8000,
     mel_flag: bool = False,
@@ -47,23 +47,23 @@ def compute_stm(
     Returns:
         np.ndarray: Mean STM over frames
     """
-    if auto_cor_window_seconds > (len(y) / sr):
+    if auto_cor_window_seconds > (len(oss_autocorrelation) / sr):
         raise ValueError("auto_cor_window_seconds cannot be bigger than duration of audio file")
 
-    if y is None:
+    if oss_autocorrelation is None:
         raise ValueError("y is not valid")
 
     if sr != target_sr:
-        y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
+        oss_autocorrelation = librosa.resample(oss_autocorrelation, orig_sr=sr, target_sr=target_sr)
         sr = target_sr
 
     # REVIEW: is this needed?
-    y, _ = librosa.effects.trim(y)
+    oss_autocorrelation, _ = librosa.effects.trim(oss_autocorrelation)
 
     if mel_flag:
-        S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels, n_fft=win_size, hop_length=hop, power=1)
+        S = librosa.feature.melspectrogram(y=oss_autocorrelation, sr=sr, n_mels=n_mels, n_fft=win_size, hop_length=hop, power=1)
     else:
-        S = librosa.stft(y=y, n_fft=win_size, hop_length=hop)
+        S = librosa.stft(y=oss_autocorrelation, n_fft=win_size, hop_length=hop)
 
     if log_flag:
         S = librosa.power_to_db(np.abs(S) ** 2, ref=np.max)
@@ -91,6 +91,9 @@ def compute_stm(
         norm_sum=auto_cor_norm_sum,
         norm_type=auto_cor_norm_type,
     )
+
+    if has_nans(oss_autocorrelation):
+        print("oss_autocorrelation contains nans")
 
     scale_transform_magnitude = np.abs(
         librosa.fmt(oss_autocorrelation, beta=0.5, axis=0)
@@ -121,7 +124,7 @@ def short_time_autocorrelation(
     M = remanining_lenght // hop_size + 1  # number of times window fits the signal
 
     window = get_window(window_type, win_size)  # get the window type
-    A = np.zeros((win_size, M))  # initialize the autocorrelation matrix
+    A = np.zeros((win_size, M))  # initialize the autocorrelation matrix o be filled
 
     if norm_sum:
         lag_summands_num = np.arange(win_size, 0, -1)
@@ -131,15 +134,25 @@ def short_time_autocorrelation(
         start_idx = i * hop_size
         end_idx = start_idx + win_size
         segment = y[start_idx:end_idx] * window  # apply window to local segment
+
+        if np.all(segment == 0):
+            print(f"Segment {i} contains only zeros")
+
         segment_correlation = np.correlate(segment, segment, mode="full")[
             win_size - 1 :
         ]  # correlate local segment with itself and select positive lags
 
+        if np.all(segment_correlation == 0):
+            print(f"Autocorrelated segment {i} contains only zeros")
+            # continue  # skip segment if it contains only zeros
+
         # apply normalization
         if norm_sum:
             segment_correlation = segment_correlation / lag_summands_num
+
         if norm_type == "max":
             segment_correlation = segment_correlation / segment_correlation[0]
+
         elif norm_type == "min-max":
             segment_correlation = (segment_correlation - segment_correlation.min()) / (
                 segment_correlation.max() - segment_correlation.min()
@@ -163,3 +176,9 @@ def get_window(window_type: str, window_size: int):
         return np.ones(window_size)
     else:
         raise ValueError("window_type should be one of 'hamming', 'rectangular'")
+
+def has_nans(x):
+    if np.any(np.isnan(x)) or np.any(np.isinf(x)):
+        return True
+    else:
+        return False
