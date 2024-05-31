@@ -1,0 +1,7 @@
+# keep this folder to store datasets
+
+# Ignore all files in this directory
+*
+
+# But do not ignore this .gitignore file
+!.gitignore
