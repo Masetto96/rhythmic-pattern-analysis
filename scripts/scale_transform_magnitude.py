@@ -1,10 +1,7 @@
 import librosa
 import numpy as np
 
-# import essentia.standard as es
 import warnings
-from scipy.signal import windows
-
 
 def compute_stm(
     y: np.ndarray,
@@ -17,50 +14,26 @@ def compute_stm(
     hop: int = 160,
     n_mels: int = 40,
     with_padding: bool = True,
-    oss_aggr=np.median,
+    oss_aggr=np.mean,
     autocor_window_type: str = "hamming",
-    auto_cor_window_seconds: float = 8,
-    auto_cor_hop_seconds: float = 0.5,
-    auto_cor_norm_type: str = "max",
-    auto_cor_norm_sum: bool = True,
+    autocor_window_seconds: float = 8,
+    autocor_hop_seconds: float = 0.5,
+    autocor_norm_type: str = "max",
+    autocor_norm_sum: bool = True,
 ):
-    """
-    Computes the Scale Transform Magnitude (STM).
-
-    Args:
-        y (np.ndarray): Input signal
-        sr (scalar): Original sampling rate
-        target_sr (scalar): Target sampling rate (resampling)
-        mel_flag (bool): If True, uses mel-spectrogram instead of short-time Fourier Transform (Default value = False)
-        log_flag (bool): If True, log compresses the magnitude of the spectrogram (Default value = True)
-        detrend (bool): Makes the spectral flux locally zero-meaned (Default value = True)
-        win_size (int): Number of FFT points
-        hop (int): Hop size
-        n_mels (int): Number of channels in mel-scale mapping
-        with_padding (bool): If True, zero-pads the onset strength signal before computing the autocorrelation (Default value = False)
-        oss_aggr (callable): Aggregate onset strength signal
-        autocor_window_type (str): Window type for the autocorrelation (Default value = "rectangular")
-        auto_cor_window_seconds (float): Window size (seconds) for the autocorrelation (Default value = 8)
-        auto_cor_hop_seconds (float): Hop size (seconds) for the autocorrelation (Default value = 0.5)
-        auto_cor_norm_type (str): Normalization type for the autocorrelation (Default value = "max")
-        auto_cor_norm_sum (bool): Normalizes by the number of summands in local autocorrelation (Default value = True)
-
-    Returns:
-        np.ndarray: Mean STM over frames
-    """
-    if auto_cor_window_seconds > (len(y) / sr):
+    # validate parameters
+    if autocor_window_seconds > (len(y) / sr): # REVIEW: what to do in this case?
         warnings.warn("auto_cor_window_seconds is bigger than duration of audio file, setting it to duration")
-        auto_cor_window_seconds = len(y) / sr
+        autocor_window_seconds = len(y) / sr
 
     if y is None:
         raise ValueError("y is not valid")
+    
+    y, _ = librosa.effects.trim(y) # removing leading and trailing silence
 
-    if sr != target_sr:
+    if sr != target_sr: # TODO: this can be done better if passing flag "resample"
         y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
         sr = target_sr
-
-    # REVIEW: is this needed?
-    y, _ = librosa.effects.trim(y)
 
     if mel_flag:
         S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels, n_fft=win_size, hop_length=hop, power=1)
@@ -70,28 +43,23 @@ def compute_stm(
     if log_flag:
         S = librosa.power_to_db(np.abs(S) ** 2, ref=np.max)
 
-    # REVIEW: what is essentia equivalent of this?
-    # https://essentia.upf.edu/reference/std_SuperFluxNovelty.html?
-    # https://essentia.upf.edu/reference/std_NoveltyCurve.html
     oss = librosa.onset.onset_strength(
         S=S, sr=sr, detrend=detrend, aggregate=oss_aggr
     )  # computing onset strength signal
 
     fs = sr / hop  # new sampling rate
 
-    N = int(np.ceil(auto_cor_window_seconds * fs))  # window size for autocorrelation
-    H = int(np.ceil(auto_cor_hop_seconds * fs))  # hop size (lag) for autocorrelation
-
-    if with_padding:  # zero pad oss before autocorrelation to center the window at the start of the signal
-        oss = zero_pad(y=oss, window_size=N)
+    N = int(np.ceil(autocor_window_seconds * fs))  # window size for autocorrelation
+    H = int(np.ceil(autocor_hop_seconds * fs))  # hop size (lag) for autocorrelation
 
     oss_autocorrelation = short_time_autocorrelation(
         y=oss,
+        with_padding=with_padding,
         win_size=N,
         hop_size=H,
         window_type=autocor_window_type,
-        norm_sum=auto_cor_norm_sum,
-        norm_type=auto_cor_norm_type,
+        norm_sum=autocor_norm_sum,
+        norm_type=autocor_norm_type,
     )
 
     scale_transform_magnitude = np.abs(
@@ -102,25 +70,19 @@ def compute_stm(
 
 
 def short_time_autocorrelation(
-    y: np.array, win_size: int, hop_size: int, window_type: str, norm_sum: bool = True, norm_type: str = "max"
+    y: np.array,
+    win_size: int,
+    hop_size: int,
+    window_type: str,
+    norm_sum: bool = True,
+    with_padding: bool = True,
+    norm_type: str = "max",
 ):
-    """
-    Compute the short-time autocorrelation matrix of a signal given a window and a hop size.
-    Finally, applies normalization.
+    if with_padding:
+        pad_lenght = win_size // 2
+        y = np.concatenate((np.zeros(pad_lenght), y, np.zeros(pad_lenght)))
 
-    Args:
-        y (np.array): Input signal
-        win_size (int): Size of the window used for autocorrelation
-        hop_size (int): Hop size used for autocorrelation
-        window_type (str): Type of window used for autocorrelation (e.g. "hamming", "rectangular")
-        norm_sum (bool): If True, normalizes the autocorrelation matrix by the number of summands
-        norm_type (str): Type of normalization used (e.g. "max", "min-max")
-
-    Returns:
-        A (np.ndarray): normalized autocorrelation matrix
-    """
-    remanining_lenght = len(y) - win_size
-    M = remanining_lenght // hop_size + 1  # number of times window fits the signal
+    M = int(np.floor(len(y) - win_size) / hop_size)  # number of times window fits into signal
 
     window = get_window(window_type, win_size)  # get the window type
     A = np.zeros((win_size, M))  # initialize the autocorrelation matrix o be filled
@@ -134,17 +96,10 @@ def short_time_autocorrelation(
         start_idx = i * hop_size
         end_idx = start_idx + win_size
         segment = y[start_idx:end_idx] * window  # apply window to local segment
-
-        if np.all(segment == 0):
-            print(f"Segment {i} contains only zeros")
-
+    
         segment_correlation = np.correlate(segment, segment, mode="full")[
             win_size - 1 :
         ]  # correlate local segment with itself and select positive lags
-
-        if np.all(segment_correlation == 0):
-            print(f"Autocorrelated segment {i} contains only zeros")
-            continue  # skip segment if it contains only zeros
 
         # apply normalization
         if norm_sum:
@@ -158,8 +113,17 @@ def short_time_autocorrelation(
                 segment_correlation.max() - segment_correlation.min()
             )
 
-        # fill autocorrelation matrix
-        A[:, i] = segment_correlation
+        # Computing periodicity spectra as well
+        # if fourier:
+        #     S, _, _ = compute_tempogram_fourier(o_n, fs, N, H, Theta=theta, window=window, valid=valid)
+        #     S = np.abs(S)
+        #     #if valid:
+        #     #    S = S[:,p1:-p2]
+        #     for n in range(S.shape[1]):
+        #         S[:, n] /= np.max(S[:, n])
+        #     return np.mean(R, axis=1), np.mean(r, axis=1), np.mean(S, axis=1), R, r, S
+
+        A[:, i] = segment_correlation # fill autocorrelation matrix
 
     return A
 
@@ -171,7 +135,7 @@ def zero_pad(y: np.array, window_size: int):
 
 def get_window(window_type: str, window_size: int):
     if window_type == "hamming":
-        return windows.hamming(window_size)
+        return librosa.filters.get_window(window_type, window_size)
     elif window_type == "rectangular":
         return np.ones(window_size)
     else:
