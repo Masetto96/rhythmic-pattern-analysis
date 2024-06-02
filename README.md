@@ -13,7 +13,7 @@
    Evaluates the degree to which the feature maintains its invariance despite transformations applied to the signal.
 
 **classification_demo.ipynb:**  
-   Showcases the practical application of the feature for classification purposes utilizing the ballroom and greek dances dataset.
+   Showcases the practical application of the feature for genre classification purposes
 
-**stm.py:**  
-  Contains the implementation of the magnitude scale transformation and all the necessary functions to compute it.
+**clustering_demo.ipynb**
+   K-means and K-medoids, UMAP visualization.
