@@ -13,7 +13,7 @@
    Evaluates the degree to which the feature maintains its invariance despite transformations applied to the signal.
 
 **classification_demo.ipynb:**  
-   Showcases the practical application of the feature for genre classification purposes
+   Showcases the practical application of the feature for genre classification purposes.
 
 **clustering_demo.ipynb**
    K-means and K-medoids, UMAP visualization.

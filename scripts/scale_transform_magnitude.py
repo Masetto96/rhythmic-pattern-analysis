@@ -3,6 +3,7 @@ import numpy as np
 
 import warnings
 
+
 def compute_stm(
     y: np.ndarray,
     sr: int,
@@ -14,41 +15,50 @@ def compute_stm(
     hop: int = 160,
     n_mels: int = 40,
     with_padding: bool = True,
-    oss_aggr=np.mean,
     autocor_window_type: str = "hamming",
     autocor_window_seconds: float = 8,
     autocor_hop_seconds: float = 0.5,
     autocor_norm_type: str = "max",
     autocor_norm_sum: bool = True,
+    num_stm_coefs: int = 200,
 ):
+    # TODO: is this needed?
+    y, _ = librosa.effects.trim(y)  # removing leading and trailing silence
+
     # validate parameters
-    if autocor_window_seconds > (len(y) / sr): # REVIEW: what to do in this case?
-        warnings.warn("auto_cor_window_seconds is bigger than duration of audio file, setting it to duration")
+    if autocor_window_seconds > (len(y) / sr):  # REVIEW: what to do in this case?
+        warnings.warn(
+            "auto_cor_window_seconds is bigger than duration of audio file, setting it to duration"
+        )
         autocor_window_seconds = len(y) / sr
 
     if y is None:
         raise ValueError("y is not valid")
-    
-    y, _ = librosa.effects.trim(y) # removing leading and trailing silence
 
-    if sr != target_sr: # TODO: this can be done better if passing flag "resample"
+    if sr != target_sr:  # TODO: this can be done better if passing flag "with_resample"
         y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
         sr = target_sr
 
     if mel_flag:
-        S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=n_mels, n_fft=win_size, hop_length=hop, power=1)
+        S = librosa.feature.melspectrogram(
+            y=y, sr=sr, n_mels=n_mels, n_fft=win_size, hop_length=hop, power=1
+        )
     else:
         S = librosa.stft(y=y, n_fft=win_size, hop_length=hop)
 
     if log_flag:
-        S = librosa.power_to_db(np.abs(S) ** 2, ref=np.max)
+        S = librosa.power_to_db(np.abs(S**2), ref=np.max)
 
     oss = librosa.onset.onset_strength(
-        S=S, sr=sr, detrend=detrend, aggregate=oss_aggr
+        S=S, sr=sr, detrend=detrend
     )  # computing onset strength signal
 
-    fs = sr / hop  # new sampling rate
+    # if sigma > 0:
+    #     o_n = gaussian_filter1d(o, sigma, axis=-1)
+    # else:
+    #     o_n = o
 
+    fs = sr / hop  # new sampling rate
     N = int(np.ceil(autocor_window_seconds * fs))  # window size for autocorrelation
     H = int(np.ceil(autocor_hop_seconds * fs))  # hop size (lag) for autocorrelation
 
@@ -66,7 +76,19 @@ def compute_stm(
         librosa.fmt(oss_autocorrelation, beta=0.5, axis=0)
     )  # fast mellin transform
 
-    return np.mean(scale_transform_magnitude, axis=1)  # return the mean over frames
+    # Computing periodicity spectra as well
+    # if fourier:
+    #     S, _, _ = compute_tempogram_fourier(o_n, fs, N, H, Theta=theta, window=window, valid=valid)
+    #     S = np.abs(S)
+    #     #if valid:
+    #     #    S = S[:,p1:-p2]
+    #     for n in range(S.shape[1]):
+    #         S[:, n] /= np.max(S[:, n])
+    #     return np.mean(R, axis=1), np.mean(r, axis=1), np.mean(S, axis=1), R, r, S
+
+    return np.mean(scale_transform_magnitude, axis=1)[
+        :num_stm_coefs
+    ]  # return the mean over frames
 
 
 def short_time_autocorrelation(
@@ -82,7 +104,9 @@ def short_time_autocorrelation(
         pad_lenght = win_size // 2
         y = np.concatenate((np.zeros(pad_lenght), y, np.zeros(pad_lenght)))
 
-    M = int(np.floor(len(y) - win_size) / hop_size)  # number of times window fits into signal
+    M = int(
+        np.floor(len(y) - win_size) / hop_size
+    )  # number of times window fits into signal
 
     window = get_window(window_type, win_size)  # get the window type
     A = np.zeros((win_size, M))  # initialize the autocorrelation matrix o be filled
@@ -96,7 +120,6 @@ def short_time_autocorrelation(
         start_idx = i * hop_size
         end_idx = start_idx + win_size
         segment = y[start_idx:end_idx] * window  # apply window to local segment
-    
         segment_correlation = np.correlate(segment, segment, mode="full")[
             win_size - 1 :
         ]  # correlate local segment with itself and select positive lags
@@ -113,17 +136,7 @@ def short_time_autocorrelation(
                 segment_correlation.max() - segment_correlation.min()
             )
 
-        # Computing periodicity spectra as well
-        # if fourier:
-        #     S, _, _ = compute_tempogram_fourier(o_n, fs, N, H, Theta=theta, window=window, valid=valid)
-        #     S = np.abs(S)
-        #     #if valid:
-        #     #    S = S[:,p1:-p2]
-        #     for n in range(S.shape[1]):
-        #         S[:, n] /= np.max(S[:, n])
-        #     return np.mean(R, axis=1), np.mean(r, axis=1), np.mean(S, axis=1), R, r, S
-
-        A[:, i] = segment_correlation # fill autocorrelation matrix
+        A[:, i] = segment_correlation  # fill autocorrelation matrix
 
     return A
 
