@@ -158,7 +158,8 @@ def load_candombe_dataset(stm_params: dict = {}):
         for start in range(0, len(y), segment_length * sr):
             # Compute the STM for the segment
             segment = y[start : start + segment_length * sr]
-            print(f"len segment: {len(segment) / sr} seconds")
+            if (len(segment) / sr) != segment_length: # discarding the last segment basically
+                continue 
             stm = compute_stm(y=segment, sr=sr, **stm_params)
 
             # Append the feature and label

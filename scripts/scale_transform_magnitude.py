@@ -1,7 +1,7 @@
+import warnings
 import librosa
 import numpy as np
 
-import warnings
 
 
 def compute_stm(
