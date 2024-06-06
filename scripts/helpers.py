@@ -3,15 +3,13 @@ import librosa
 
 
 def generate_spectrogram(y, sr, mel_flag, log_flag, win_size, hop, n_mels):
+    S = np.abs(librosa.stft(y=y,hop_length=hop, n_fft=win_size))**2
     if mel_flag:
         S = librosa.feature.melspectrogram(
-            y=y, sr=sr, n_mels=n_mels, n_fft=win_size, hop_length=hop, power=1
+            S=S, n_mels=n_mels, sr=sr
         )
-    else:
-        S = librosa.stft(y=y, n_fft=win_size, hop_length=hop)
-
     if log_flag:
-        S = librosa.power_to_db(np.abs(S**2), ref=np.max)
+        S = librosa.power_to_db(S, ref=np.max)
 
     return S
 
@@ -31,7 +29,7 @@ def short_time_autocorrelation(
 
     M = int(
         np.floor(len(y) - win_size) / hop_size
-    )  # number of times window fits into signal
+    ) + 1  # number of times window fits into signal
 
     window = get_window(window_type, win_size)  # get the window type
     A = np.zeros((win_size, M))  # initialize the autocorrelation matrix o be filled
@@ -66,9 +64,9 @@ def short_time_autocorrelation(
     return A
 
 
-def zero_pad(y: np.array, window_size: int):
-    pad_lenght = window_size // 2
-    return np.pad(y, pad_lenght, mode="constant")
+# def zero_pad(y: np.array, window_size: int):
+#     pad_lenght = window_size // 2
+#     return np.pad(y, pad_lenght, mode="constant")
 
 
 def get_window(window_type: str, window_size: int):
