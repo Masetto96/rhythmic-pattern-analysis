@@ -124,6 +124,7 @@ def compute_stm_multi_channel(
     autocor_norm_type: str = "max",
     autocor_norm_sum: bool = True,
     num_stm_coefs: int = 200,
+    sigma=1,
 ):
     # TODO: is this needed?
     y, _ = librosa.effects.trim(y)  # removing leading and trailing silence
@@ -153,6 +154,9 @@ def compute_stm_multi_channel(
         n_fft=win_size,
         n_mels=n_mels,
     )  # computing onset strength signal on multiple channels
+
+    if sigma > 0:
+        oss_multi = gaussian_filter1d(oss_multi, sigma, axis=-1)
 
     fs = sr / hop  # new sampling rate
     N = int(np.ceil(autocor_window_seconds * fs))  # window size for autocorrelation
