@@ -195,7 +195,7 @@ def load_cretan_dances_dataset(stm_params: dict = {}):
             label = subfolder.name
             print(f"Processing folder: {label}")
             for audio_file in subfolder.glob("*.wav"):
-                y, sr = librosa.load(audio_file, sr=None)
+                y, sr = librosa.load(audio_file, sr=None, duration=20)
                 stm = compute_stm(y, sr, **stm_params)
                 features.append(stm)
                 labels.append(label)
@@ -219,7 +219,7 @@ def load_ballroom_dataset(stm_params: dict = {}):
             print(f"Processing folder: {parent_folder.name}")
             label = parent_folder.name.lower()
             for audio_file in parent_folder.glob("*.wav"):
-                y, sr = librosa.load(audio_file, sr=None)
+                y, sr = librosa.load(audio_file, sr=None, duration=20)
                 stm = compute_stm(y, sr, **stm_params)
                 features.append(stm)
                 labels.append(label)
