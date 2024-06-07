@@ -88,3 +88,4 @@ def plot_silhouette_coef(embeddings, cluster_number: int, silhouette_avg, sample
     colors = cm.nipy_spectral(labels.astype(float) / cluster_number)
     ax2.scatter(embeddings[:, 0], embeddings[:, 1], marker=".", s=30, lw=0, alpha=0.7, c=colors, edgecolor="k")
     ax2.set_title(f"Visualization of clustered data: {dim_reduction.upper()}")
+ 

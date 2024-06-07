@@ -2,7 +2,7 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import librosa
-from scripts.scale_transform_magnitude import compute_stm
+from scripts.scale_transform_magnitude import compute_stm, compute_stm_multi_channel
 
 
 def process_malian_jembe_annotation(row, audio_file_path):
@@ -23,7 +23,7 @@ def process_malian_jembe_annotation(row, audio_file_path):
     return y, sr, label
 
 
-def load_malian_jembe_dataset(stm_params: dict = {}):
+def load_malian_jembe_dataset(multi_channel_stm = False, stm_params: dict = {}):
     """
     Audio segments are loaded based on time-stamps contained in the annotations.
 
@@ -36,21 +36,21 @@ def load_malian_jembe_dataset(stm_params: dict = {}):
     hover_data_mj: pandas.DataFrame
         DataFrame with hover data.
     """
-    # Define paths to the dataset
     mj_media = Path("../datasets/MJ/Media")
     mj_annotations = Path("../datasets/MJ/Annotations")
 
-    # Initialize lists for feature and labels
     features_mj, labels_mj = [], []
 
-    # lists to construct hover data df
     pattern, tradition, instrument = [], [], []
 
-    # Define column names for annotation files
     columns = ["category", "start", "end", "duration", "label"]
 
-    # Define a list for duration values
     durations = []
+
+    if multi_channel_stm:
+        stm_func = compute_stm_multi_channel
+    else:
+        stm_func = compute_stm
 
     # Iterate over annotation folders
     for parent_folder in mj_annotations.iterdir():
@@ -97,7 +97,7 @@ def load_malian_jembe_dataset(stm_params: dict = {}):
                             label = f"{label}_{audio_file.stem}"
                             # Append the label and feature to the corresponding lists
                             labels_mj.append(label)
-                            stm = compute_stm(y=y, sr=sr, **stm_params)
+                            stm, *_ = stm_func(y=y, sr=sr, **stm_params)
                             features_mj.append(stm)
 
                             # Split the label and append parts to the corresponding lists
@@ -121,7 +121,7 @@ def load_malian_jembe_dataset(stm_params: dict = {}):
     return features_mj, labels_mj, hover_data_mj
 
 
-def load_candombe_dataset(stm_params: dict = {}):
+def load_candombe_dataset(multi_channel_stm = False, stm_params: dict = {}):
     """
     Each wav file is segmented into 20 second long non-overlapping segments.
 
@@ -130,6 +130,10 @@ def load_candombe_dataset(stm_params: dict = {}):
         labels_candombe (list): A list of corresponding labels.
         hover_data_candombe (DataFrame): A DataFrame with additional information for hovering in the visualization.
     """
+    if multi_channel_stm:
+        stm_func = compute_stm_multi_channel
+    else:
+        stm_func = compute_stm
 
     # Path to the Candombe dataset
     candombe_media = Path("../datasets/candombe/Media")
@@ -151,16 +155,15 @@ def load_candombe_dataset(stm_params: dict = {}):
         y, sr = librosa.load(file)
 
         # Segment length in seconds
-        segment_length = 20
+        segment_length = 30
 
         # Iterate over the segments
-        # TODO: debug, last segment is shorter than 20 seconds bc it's the remaning part of the audio
         for start in range(0, len(y), segment_length * sr):
             # Compute the STM for the segment
             segment = y[start : start + segment_length * sr]
             if (len(segment) / sr) != segment_length: # discarding the last segment basically
                 continue 
-            stm = compute_stm(y=segment, sr=sr, **stm_params)
+            stm, *_ = stm_func(y=segment, sr=sr, **stm_params)
 
             # Append the feature and label
             features_candombe.append(stm)
@@ -186,17 +189,21 @@ def load_candombe_dataset(stm_params: dict = {}):
     return features_candombe, labels_candombe, hover_data_candombe
 
 
-def load_cretan_dances_dataset(stm_params: dict = {}):
+def load_cretan_dances_dataset(multi_channel_stm = False, stm_params: dict = {}):
     cretan_dances_data_path = Path("../datasets/CretanDances")
     features, labels, audio_files_paths = [], [], []
+    if multi_channel_stm:
+        stm_func = compute_stm_multi_channel
+    else:
+        stm_func = compute_stm
 
     for subfolder in cretan_dances_data_path.iterdir():
         if subfolder.is_dir():
             label = subfolder.name
             print(f"Processing folder: {label}")
             for audio_file in subfolder.glob("*.wav"):
-                y, sr = librosa.load(audio_file, sr=None, duration=20)
-                stm = compute_stm(y, sr, **stm_params)
+                y, sr = librosa.load(audio_file, sr=None, duration=30)
+                stm, *_ = stm_func(y, sr, **stm_params)
                 features.append(stm)
                 labels.append(label)
                 audio_files_paths.append(audio_file.stem)
@@ -208,9 +215,13 @@ def load_cretan_dances_dataset(stm_params: dict = {}):
     return features, labels, hover_data_cretan
 
 
-def load_ballroom_dataset(stm_params: dict = {}):
+def load_ballroom_dataset(multi_channel_stm = False, stm_params: dict = {}):
     dataset_path = Path("../datasets/BallroomData")
     features, labels, audio_files_paths = [], [], []
+    if multi_channel_stm:
+        stm_func = compute_stm_multi_channel
+    else:
+        stm_func = compute_stm
 
     for parent_folder in dataset_path.iterdir():
         if parent_folder.is_dir():
@@ -219,8 +230,9 @@ def load_ballroom_dataset(stm_params: dict = {}):
             print(f"Processing folder: {parent_folder.name}")
             label = parent_folder.name.lower()
             for audio_file in parent_folder.glob("*.wav"):
-                y, sr = librosa.load(audio_file, sr=None, duration=20)
-                stm = compute_stm(y, sr, **stm_params)
+                y, sr = librosa.load(audio_file, sr=None, duration=30)
+                # stm = compute_stm(y, sr, **stm_params)
+                stm, *_ = stm_func(y, sr, **stm_params)
                 features.append(stm)
                 labels.append(label)
                 audio_files_paths.append(audio_file.stem)

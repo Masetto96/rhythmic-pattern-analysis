@@ -9,7 +9,6 @@ from .helpers import (
 )
 from scipy.ndimage import gaussian_filter1d
 
-
 def compute_stm(
     y: np.ndarray = None,
     sr: int = 44100,
@@ -109,7 +108,7 @@ def compute_stm(
 def compute_stm_multi_channel(
     y: np.ndarray = None,
     sr: int = 44100,
-    channels=[0, 5, 40],
+    channels=[0, 5, 20, 40],
     target_sr: int = 8000,
     mel_flag: bool = True,
     log_flag: bool = True,
@@ -122,7 +121,7 @@ def compute_stm_multi_channel(
     autocor_window_seconds: float = 8,
     autocor_hop_seconds: float = 0.5,
     autocor_norm_type: str = "max",
-    autocor_norm_sum: bool = True,
+    autocor_norm_sum: bool = False,
     num_stm_coefs: int = 200,
     sigma=1,
 ):
@@ -143,7 +142,7 @@ def compute_stm_multi_channel(
         y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
         sr = target_sr
 
-    S = generate_spectrogram(y, sr, mel_flag, log_flag, win_size, hop, n_mels)
+    # S = generate_spectrogram(y, sr, mel_flag, log_flag, win_size, hop, n_mels)
 
     oss_multi = librosa.onset.onset_strength_multi(
         y=y,
@@ -177,4 +176,4 @@ def compute_stm_multi_channel(
         R.append(np.mean(stm, axis=1)[:num_stm_coefs])
 
     R = np.vstack(R)
-    return R
+    return np.mean(R, axis=0), R

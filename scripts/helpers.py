@@ -1,17 +1,11 @@
 import numpy as np
 import librosa
-
-
-def generate_spectrogram(y, sr, mel_flag, log_flag, win_size, hop, n_mels):
-    S = np.abs(librosa.stft(y=y,hop_length=hop, n_fft=win_size))**2
-    if mel_flag:
-        S = librosa.feature.melspectrogram(
-            S=S, n_mels=n_mels, sr=sr
-        )
-    if log_flag:
-        S = librosa.power_to_db(S, ref=np.max)
-
-    return S
+import pandas as pd
+from bokeh.plotting import figure, output_file
+from bokeh.models import ColumnDataSource, CustomJS, HoverTool
+from bokeh.io import output_notebook
+from bokeh.transform import linear_cmap
+from bokeh.palettes import Category20_10
 
 
 def short_time_autocorrelation(
@@ -27,9 +21,9 @@ def short_time_autocorrelation(
         pad_lenght = win_size // 2
         y = np.concatenate((np.zeros(pad_lenght), y, np.zeros(pad_lenght)))
 
-    M = int(
-        np.floor(len(y) - win_size) / hop_size
-    ) + 1  # number of times window fits into signal
+    M = (
+        int(np.floor(len(y) - win_size) / hop_size) + 1
+    )  # number of times window fits into signal
 
     window = get_window(window_type, win_size)  # get the window type
     A = np.zeros((win_size, M))  # initialize the autocorrelation matrix o be filled
@@ -62,11 +56,6 @@ def short_time_autocorrelation(
         A[:, i] = segment_correlation  # fill autocorrelation matrix
 
     return A
-
-
-# def zero_pad(y: np.array, window_size: int):
-#     pad_lenght = window_size // 2
-#     return np.pad(y, pad_lenght, mode="constant")
 
 
 def get_window(window_type: str, window_size: int):
@@ -136,3 +125,101 @@ def compute_tempogram_fourier(
         T_coef = np.arange(M) * H / Fs + (N // 2) / Fs
     F_coef_BPM = Theta
     return X, T_coef, F_coef_BPM
+
+
+def display_interactive_scatter_plot(
+    embeddings2d,
+    labels,
+    hover_data: pd.DataFrame,
+    output_filename: str = "scatter_interactive.html",
+):
+    """
+    Displays an interactive scatter plot with UMAP embeddings and audio playback on click.
+
+    Parameters:
+    - embeddings2d: 2D array or DataFrame with UMAP embeddings (shape: [n_samples, 2])
+    - hover_data: DataFrame containing additional information for hover tooltips and audio file paths
+    - output_filename: Filename for saving the plot as an HTML file
+    """
+
+    # Prepare the data dictionary combining embeddings and hover data
+    data = {
+        "x": embeddings2d[:, 0],
+        "y": embeddings2d[:, 1],
+        "absolute_path": hover_data["absolute_path"],
+        "genre": hover_data["genre"],
+        "style": hover_data["style"],
+        "audio_filename": hover_data["audio_filename"],
+        "label": labels,
+    }
+    color_mapper = linear_cmap(
+        field_name="label", palette=Category20_10, low=min(labels), high=max(labels)
+    )
+    # Create a ColumnDataSource from the dictionary
+    source = ColumnDataSource(data=data)
+
+    # Create a scatter plot with navigation tools
+    tools = "tap, wheel_zoom, box_zoom, pan, reset"
+    p = figure(
+        title="Interactive UMAP Plot with Audio", tools=tools, width=1400, height=800
+    )
+    # scatter = p.scatter('x', 'y', size=10, source=source)
+    scatter = p.scatter("x", "y", size=7, source=source, color=color_mapper)
+
+    # Define CustomJS to handle the tap event
+    callback = CustomJS(
+        args=dict(source=source),
+        code="""
+        if (window.currentAudio) {
+            window.currentAudio.pause();
+            window.currentAudio = null;
+        }
+        var indices = source.selected.indices;
+        if (indices.length > 0) {
+            var index = indices[0];
+            var audio_file = source.data['absolute_path'][index];
+            var audio = new Audio(audio_file);
+            audio.play();
+            window.currentAudio = audio;
+        }
+    """,
+    )
+
+    # Add the callback to the plot
+    p.js_on_event("tap", callback)
+
+    # Add hover tool to the plot
+    hover = HoverTool(
+        renderers=[scatter],
+        tooltips=[
+            ("Genre", "@genre"),
+            ("Style", "@style"),
+            ("File", "@audio_filename"),
+        ],
+    )
+    # Add legend
+    # p.legend.title = 'Label'
+    p.add_tools(hover)
+
+    # Output to a file (for saving and viewing in a browser)
+    output_file(output_filename)
+
+    # Display the plot inline in the notebook
+    output_notebook()
+
+    return p
+
+
+def generate_spectrogram(y, sr, mel_flag, log_flag, win_size, hop, n_mels):
+    S = np.abs(librosa.stft(y=y, hop_length=hop, n_fft=win_size)) ** 2
+    if mel_flag:
+        S = librosa.feature.melspectrogram(S=S, n_mels=n_mels, sr=sr)
+    if log_flag:
+        S = librosa.power_to_db(S, ref=np.max)
+
+    return S
+
+
+# def zero_pad(y: np.array, window_size: int):
+#     pad_lenght = window_size // 2
+#     return np.pad(y, pad_lenght, mode="constant")

@@ -9,6 +9,8 @@ __pycache__/
 # hidden files
 .*
 
+# html in demo_notebooks
+demo_notebooks/*.html
 
 # Distribution / packaging
 .Python
