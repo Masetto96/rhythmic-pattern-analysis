@@ -5,6 +5,43 @@ import librosa
 from scripts.scale_transform_magnitude import compute_stm, compute_stm_multi_channel
 
 
+
+def load_brid_dataset(multi_channel_stm = False, stm_params: dict = {}):
+    data_path = Path("../datasets/BRID/Data/Solo Tracks")
+    if multi_channel_stm:
+        stm_func = compute_stm_multi_channel
+    else:
+        stm_func = compute_stm
+    instrument, labels, features = [], [], []
+    for parent_folder in data_path.iterdir():
+        for i in range(1, 4):
+            if str(i) in parent_folder.name:
+                print(f"Processing folder: {parent_folder.name}")
+                metadata = pd.read_excel("../datasets/BRID/BRID - Description.xlsx", sheet_name=f"Solos - Instrumentalist {i}")
+                for subfolder in parent_folder.iterdir():
+                    print(subfolder.name)
+                    metadata_instrument = metadata[metadata["Instrument"].str.contains(subfolder.name, case=False, na=False)]
+                    for row in metadata_instrument.itertuples(index=False):
+                        file_name = f"[{row[1]}] {row[2]}.wav"
+                        try:
+                            y, sr = librosa.load(subfolder / file_name, sr=None, duration=30)
+                            stm, *_ = stm_func(y=y, sr=sr, **stm_params)    
+                            features.append(stm)
+                        except FileNotFoundError:
+                            # print(e)
+                            file_name = f"[0{row[1]}] {row[2]}.wav"
+                            y, sr = librosa.load(subfolder / file_name, sr=None, duration=30)
+                            stm, *_ = stm_func(y=y, sr=sr, **stm_params)    
+                            features.append(stm)
+                        finally:
+                            labels.append(row[4])
+                            instrument.append(row[3])
+
+    hover_data_brid = pd.DataFrame({"pattern": labels, "instrument": instrument, "tradition": "Brazilian"})
+
+    return features, labels, hover_data_brid
+
+
 def process_malian_jembe_annotation(row, audio_file_path):
     """
     Processing the row of the annotation file.
